@@ -58,13 +58,9 @@ struct MenuBarContentView: View {
                         .font(.headline)
                 }
 
-                HStack(spacing: 6) {
-                    Text(statusSummary)
-                    Text("•")
-                    Text("Every \(refreshIntervalMinutes)m")
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Text(statusSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer()

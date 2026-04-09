@@ -21,6 +21,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             appState.startPollingIfNeeded(repositoryStore: repositoryStore, intervalMinutes: refreshIntervalMinutes)
             await repositoryStore.refreshRepositories(appState: appState)
         }
+
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in
+                self.appState.restartPolling(repositoryStore: self.repositoryStore, intervalMinutes: self.refreshIntervalMinutes)
+                self.refreshPopoverContent()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -94,10 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         )
         .environment(appState)
         .environment(repositoryStore)
-        .onChange(of: refreshIntervalMinutes) { [self] _, newValue in
-            self.appState.restartPolling(repositoryStore: self.repositoryStore, intervalMinutes: newValue)
-            self.refreshPopoverContent()
-        }
 
         let hostingController = NSHostingController(rootView: repositoryListView)
 
