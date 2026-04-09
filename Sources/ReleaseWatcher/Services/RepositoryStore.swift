@@ -241,11 +241,27 @@ struct AppMetadata {
     }
 
     static func isVersionNewer(_ latestTag: String) -> Bool {
-        normalize(latestTag) != normalize(versionString)
+        compareVersion(normalize(latestTag), normalize(versionString)) == .orderedDescending
     }
 
     private static func normalize(_ raw: String) -> String {
         raw.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+    }
+
+    private static func compareVersion(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let lhsParts = lhs.split(separator: ".").compactMap { Int($0) }
+        let rhsParts = rhs.split(separator: ".").compactMap { Int($0) }
+        let count = max(lhsParts.count, rhsParts.count)
+
+        for index in 0..<count {
+            let left = index < lhsParts.count ? lhsParts[index] : 0
+            let right = index < rhsParts.count ? rhsParts[index] : 0
+
+            if left < right { return .orderedAscending }
+            if left > right { return .orderedDescending }
+        }
+
+        return .orderedSame
     }
 }
 
