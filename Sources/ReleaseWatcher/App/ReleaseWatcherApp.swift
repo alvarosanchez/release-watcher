@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import ServiceManagement
 import SwiftUI
 
@@ -43,11 +44,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func installStatusItem() {
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "dot.radiowaves.left.and.right", accessibilityDescription: "Release Watcher")
+            button.image = statusItemImage()
             button.action = #selector(handleStatusItemClick(_:))
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+    }
+
+    private func statusItemImage() -> NSImage? {
+        if let imageURL = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+           let image = NSImage(contentsOf: imageURL) {
+            image.isTemplate = false
+            image.size = NSSize(width: 18, height: 18)
+            return image
+        }
+
+        return NSImage(systemSymbolName: "dot.radiowaves.left.and.right", accessibilityDescription: "Release Watcher")
     }
 
     private func configurePopover() {
@@ -64,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let footerHeight: CGFloat = 44
         let dividerHeight: CGFloat = 2
         let contentPadding: CGFloat = 24
-        let rowHeight: CGFloat = 70
+        let rowHeight: CGFloat = 86
         let rowSpacing: CGFloat = 8
 
         let naturalRowsHeight = CGFloat(visibleCount) * rowHeight + CGFloat(max(visibleCount - 1, 0)) * rowSpacing

@@ -10,6 +10,7 @@ struct MenuBarContentView: View {
 
     private enum Layout {
         static let popoverWidth: CGFloat = 400
+        static let appIconSize: CGFloat = 24
         static let outerPadding: CGFloat = 16
         static let sectionPadding: CGFloat = 12
         static let rowPaddingX: CGFloat = 12
@@ -50,9 +51,7 @@ struct MenuBarContentView: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                    appIcon
 
                     Text("Release Watcher")
                         .font(.headline)
@@ -84,6 +83,22 @@ struct MenuBarContentView: View {
                 }
             }
             .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var appIcon: some View {
+        if let imageURL = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+           let nsImage = NSImage(contentsOf: imageURL) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: Layout.appIconSize, height: Layout.appIconSize)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        } else {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.title3)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -122,16 +137,7 @@ struct MenuBarContentView: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.never)
-            .frame(maxHeight: popoverListHeight)
         }
-    }
-
-    private var popoverListHeight: CGFloat {
-        let visibleCount = repositoryStore.sortedRepositories.count
-        let rowHeight: CGFloat = 70
-        let rowSpacingTotal = CGFloat(max(visibleCount - 1, 0)) * Layout.rowSpacing
-        let naturalHeight = CGFloat(visibleCount) * rowHeight + rowSpacingTotal + 8
-        return min(max(naturalHeight, 70), 420)
     }
 
     private func repositoryRow(_ repository: WatchedRepository) -> some View {

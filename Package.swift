@@ -13,6 +13,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "ReleaseWatcher",
+            resources: [
+                .process("Resources/AppIcon.png"),
+                .process("Resources/MenuBarIcon.png"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
