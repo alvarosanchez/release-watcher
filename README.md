@@ -1,10 +1,28 @@
 # Release Watcher
 
+<p align="center">
+  <a href="https://github.com/alvarosanchez/release-watcher/stargazers">
+    <img alt="GitHub stars" src="https://img.shields.io/github/stars/alvarosanchez/release-watcher?style=flat-square">
+  </a>
+  <a href="https://github.com/alvarosanchez/release-watcher/issues">
+    <img alt="GitHub issues" src="https://img.shields.io/github/issues/alvarosanchez/release-watcher?style=flat-square">
+  </a>
+  <a href="https://github.com/alvarosanchez/release-watcher/releases">
+    <img alt="GitHub release" src="https://img.shields.io/github/v/release/alvarosanchez/release-watcher?style=flat-square">
+  </a>
+  <img alt="Platform" src="https://img.shields.io/badge/platform-macOS-111827?style=flat-square">
+  <img alt="Built with Swift" src="https://img.shields.io/badge/built%20with-Swift-F05138?style=flat-square&logo=swift&logoColor=white">
+</p>
+
 Release Watcher is a lightweight macOS menu bar app that keeps an eye on GitHub repositories and lets you know when a new release appears.
 
 If you find it useful, please consider **starring the project on GitHub** — it helps a lot and makes the project easier for other people to discover.
 
 **GitHub:** https://github.com/alvarosanchez/release-watcher
+
+<p align="center">
+  <img src="docs/images/release-watcher-popover.png" alt="Release Watcher popover screenshot" width="480">
+</p>
 
 ## What it does
 
