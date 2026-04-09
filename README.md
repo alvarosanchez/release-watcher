@@ -18,8 +18,6 @@ Release Watcher is a lightweight macOS menu bar app that keeps an eye on GitHub 
 
 If you find it useful, please consider **starring the project on GitHub** — it helps a lot and makes the project easier for other people to discover.
 
-**GitHub:** https://github.com/alvarosanchez/release-watcher
-
 <p align="center">
   <img src="docs/images/release-watcher-popover.png" alt="Release Watcher popover screenshot" width="480">
 </p>
