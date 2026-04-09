@@ -9,6 +9,7 @@ CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCE_DIR="${CONTENTS_DIR}/Resources"
 ZIP_PATH="dist/${APP_NAME}.zip"
+SIGN_IDENTITY="-"
 
 rm -rf dist
 mkdir -p "${MACOS_DIR}" "${RESOURCE_DIR}"
@@ -24,6 +25,8 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 <dict>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>${APP_NAME}</string>
     <key>CFBundleExecutable</key>
     <string>${APP_NAME}</string>
     <key>CFBundleIdentifier</key>
@@ -48,5 +51,9 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
 </plist>
 PLIST
 
+codesign --force --deep --sign "${SIGN_IDENTITY}" "${APP_DIR}"
+codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
+
+rm -f "${ZIP_PATH}"
 ditto -c -k --sequesterRsrc --keepParent "${APP_DIR}" "${ZIP_PATH}"
 echo "Packaged ${ZIP_PATH}"

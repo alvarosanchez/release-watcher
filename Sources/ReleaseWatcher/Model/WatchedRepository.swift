@@ -7,6 +7,9 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
     var addedAt: Date
     var isWatchingPrereleases: Bool
     var latestKnownTag: String?
+    var latestReleaseName: String?
+    var latestReleaseURL: URL?
+    var latestReleasePublishedAt: Date?
     var snapshots: [ReleaseSnapshot]
 
     init(
@@ -16,6 +19,9 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         addedAt: Date = .now,
         isWatchingPrereleases: Bool = false,
         latestKnownTag: String? = nil,
+        latestReleaseName: String? = nil,
+        latestReleaseURL: URL? = nil,
+        latestReleasePublishedAt: Date? = nil,
         snapshots: [ReleaseSnapshot] = []
     ) {
         self.id = id
@@ -24,6 +30,9 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         self.addedAt = addedAt
         self.isWatchingPrereleases = isWatchingPrereleases
         self.latestKnownTag = latestKnownTag
+        self.latestReleaseName = latestReleaseName
+        self.latestReleaseURL = latestReleaseURL
+        self.latestReleasePublishedAt = latestReleasePublishedAt
         self.snapshots = snapshots
     }
 
