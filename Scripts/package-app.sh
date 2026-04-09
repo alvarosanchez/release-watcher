@@ -3,14 +3,18 @@ set -euo pipefail
 
 APP_NAME="ReleaseWatcher"
 CONFIGURATION="release"
-BINARY_PATH=".build/arm64-apple-macosx/${CONFIGURATION}/${APP_NAME}"
+BUILD_ROOT=".build/arm64-apple-macosx/${CONFIGURATION}"
+BINARY_PATH="${BUILD_ROOT}/${APP_NAME}"
 APP_DIR="dist/${APP_NAME}.app"
 RAW_VERSION="${GITHUB_REF_NAME:-0.1.0}"
 APP_VERSION="${RAW_VERSION#v}"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCE_DIR="${CONTENTS_DIR}/Resources"
-ZIP_PATH="dist/${APP_NAME}.zip"
+DMG_STAGING_DIR="dist/dmg"
+DMG_CONTENT_DIR="${DMG_STAGING_DIR}/content"
+DMG_RW_PATH="${DMG_STAGING_DIR}/${APP_NAME}-temp.dmg"
+DMG_PATH="dist/${APP_NAME}.dmg"
 ICON_SOURCE="Assets/IconSource/icon.png"
 APP_ICONSET_DIR="Assets/AppIcon.iconset"
 LEGACY_APP_ICON_PATH="Assets/AppIcon-1024.png"
@@ -18,11 +22,28 @@ DIST_ICONSET_DIR="dist/${APP_NAME}.iconset"
 ICON_FILE="${APP_NAME}.icns"
 ICON_PATH="${RESOURCE_DIR}/${ICON_FILE}"
 SIGN_IDENTITY="-"
+VOLUME_NAME="${APP_NAME}"
+WINDOW_LEFT=100
+WINDOW_TOP=100
+WINDOW_RIGHT=640
+WINDOW_BOTTOM=360
+APP_X=180
+APP_Y=170
+APPLICATIONS_X=460
+APPLICATIONS_Y=170
+
+cleanup() {
+    if [[ -n "${MOUNT_POINT:-}" ]] && mount | grep -q "on ${MOUNT_POINT} "; then
+        hdiutil detach "${MOUNT_POINT}" -quiet || true
+    fi
+}
+
+trap cleanup EXIT
 
 rm -rf dist
 rm -rf "${APP_ICONSET_DIR}"
 mkdir -p "$(dirname "${LEGACY_APP_ICON_PATH}")"
-mkdir -p "${MACOS_DIR}" "${RESOURCE_DIR}" "${APP_ICONSET_DIR}" "${DIST_ICONSET_DIR}"
+mkdir -p "${MACOS_DIR}" "${RESOURCE_DIR}" "${APP_ICONSET_DIR}" "${DIST_ICONSET_DIR}" "${DMG_CONTENT_DIR}"
 
 swift build -c "${CONFIGURATION}"
 cp "${BINARY_PATH}" "${MACOS_DIR}/${APP_NAME}"
@@ -87,6 +108,32 @@ PLIST
 codesign --force --deep --sign "${SIGN_IDENTITY}" "${APP_DIR}"
 codesign --verify --deep --strict --verbose=2 "${APP_DIR}"
 
-rm -f "${ZIP_PATH}"
-ditto -c -k --sequesterRsrc --keepParent "${APP_DIR}" "${ZIP_PATH}"
-echo "Packaged ${ZIP_PATH}"
+cp -R "${APP_DIR}" "${DMG_CONTENT_DIR}/"
+ln -s /Applications "${DMG_CONTENT_DIR}/Applications"
+
+rm -f "${DMG_RW_PATH}" "${DMG_PATH}"
+hdiutil create \
+    -volname "${VOLUME_NAME}" \
+    -srcfolder "${DMG_CONTENT_DIR}" \
+    -fs HFS+ \
+    -format UDRW \
+    "${DMG_RW_PATH}" >/dev/null
+
+MOUNT_OUTPUT=$(hdiutil attach -readwrite -noverify -noautoopen "${DMG_RW_PATH}")
+MOUNT_POINT=$(printf "%s\n" "${MOUNT_OUTPUT}" | awk -F $'\t' '/\/Volumes\// {print $3; exit}')
+
+if [[ -z "${MOUNT_POINT}" ]]; then
+    echo "Failed to mount DMG staging volume" >&2
+    exit 1
+fi
+
+ln -sfn /Applications "${MOUNT_POINT}/Applications"
+
+sync
+hdiutil detach "${MOUNT_POINT}" -quiet
+MOUNT_POINT=""
+
+hdiutil convert "${DMG_RW_PATH}" -format UDZO -imagekey zlib-level=9 -o "${DMG_PATH}" >/dev/null
+rm -f "${DMG_RW_PATH}"
+
+echo "Packaged ${DMG_PATH}"

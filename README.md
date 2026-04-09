@@ -37,12 +37,20 @@ The easiest way to install Release Watcher is from the GitHub Releases page.
 
 1. Open the releases page:
    https://github.com/alvarosanchez/release-watcher/releases
-2. Download the latest `ReleaseWatcher.zip`
-3. Unzip it
-4. Move `ReleaseWatcher.app` to your **Applications** folder
-5. Open the app
+2. Download the latest `ReleaseWatcher.dmg`
+3. Open the disk image
+4. Drag `ReleaseWatcher.app` into your **Applications** folder
+5. Open the app from Applications
 
 Depending on your macOS security settings, you may need to confirm that you want to open the app the first time.
+
+If macOS says the app is damaged or blocks it from opening because it was downloaded from the internet, remove the quarantine flag with:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/ReleaseWatcher.app
+```
+
+Then try opening **Release Watcher** again.
 
 ## How to use it
 
@@ -93,7 +101,7 @@ Scripts/package-app.sh
 
 This generates:
 - `dist/ReleaseWatcher.app`
-- `dist/ReleaseWatcher.zip`
+- `dist/ReleaseWatcher.dmg`
 
 ## Contributing, feedback, and issues
 
