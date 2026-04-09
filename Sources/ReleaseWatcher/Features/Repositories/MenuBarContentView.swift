@@ -126,8 +126,16 @@ struct MenuBarContentView: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.never)
-            .frame(maxHeight: 280)
+            .frame(maxHeight: popoverListHeight)
         }
+    }
+
+    private var popoverListHeight: CGFloat {
+        let visibleCount = repositoryStore.sortedRepositories.count
+        let rowHeight: CGFloat = 70
+        let rowSpacingTotal = CGFloat(max(visibleCount - 1, 0)) * Layout.rowSpacing
+        let naturalHeight = CGFloat(visibleCount) * rowHeight + rowSpacingTotal + 8
+        return min(max(naturalHeight, 70), 420)
     }
 
     private func repositoryRow(_ repository: WatchedRepository) -> some View {
@@ -204,7 +212,7 @@ struct MenuBarContentView: View {
 
     private var footer: some View {
         HStack(spacing: 8) {
-            Label("\(repositoryStore.repositories.count) watched", systemImage: "number.circle")
+            Label("\(repositoryStore.sortedRepositories.count) watched", systemImage: "number.circle")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -254,7 +262,7 @@ struct MenuBarContentView: View {
             return "Updated \(lastRefreshAt.formatted(.relative(presentation: .named)))"
         }
 
-        return repositoryStore.repositories.isEmpty ? "No repositories configured" : "Watching \(repositoryStore.repositories.count) repositories"
+        return repositoryStore.sortedRepositories.isEmpty ? "No repositories configured" : "Watching \(repositoryStore.sortedRepositories.count) repositories"
     }
 
     private func rowAccent(for repository: WatchedRepository) -> Color {

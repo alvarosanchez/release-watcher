@@ -227,13 +227,24 @@ struct RepositoryListView: View {
                     Label("Last checked \(lastRefreshAt, format: .relative(presentation: .named)).", systemImage: "clock")
                         .foregroundStyle(.secondary)
                 } else {
-                    Label("Add one or more repositories. The menu bar app will keep checking them automatically.", systemImage: "info.circle")
+                    Label("Add one or more repositories. Release Watcher will keep checking them automatically from the menu bar.", systemImage: "info.circle")
                         .foregroundStyle(.secondary)
                 }
             }
             .font(.caption)
 
             VStack(alignment: .leading, spacing: 4) {
+                Label("About Release Watcher \(AppMetadata.versionString)", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let update = repositoryStore.availableAppUpdate, update.isNewerThanInstalled {
+                    Link(destination: update.releaseURL) {
+                        Label("A newer version is available: \(update.latestVersion)", systemImage: "arrow.down.circle")
+                    }
+                    .font(.caption)
+                }
+
                 Link(destination: URL(string: "https://github.com/alvarosanchez/release-watcher")!) {
                     Label("Visit the project page, report issues, or star Release Watcher if you enjoy it", systemImage: "arrow.up.forward.square")
                 }

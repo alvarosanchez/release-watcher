@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         Task { @MainActor in
             await repositoryStore.requestNotificationPermission()
             appState.startPollingIfNeeded(repositoryStore: repositoryStore, intervalMinutes: refreshIntervalMinutes)
+            await repositoryStore.refreshRepositories(appState: appState)
         }
     }
 
@@ -41,11 +42,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
-        popover.contentSize = NSSize(width: 380, height: 320)
+        popover.contentSize = popoverSize
         refreshPopoverContent()
     }
 
+    private var popoverSize: NSSize {
+        let visibleCount = repositoryStore.sortedRepositories.count
+        let headerHeight: CGFloat = 74
+        let footerHeight: CGFloat = 44
+        let dividerHeight: CGFloat = 2
+        let contentPadding: CGFloat = 24
+        let rowHeight: CGFloat = 70
+        let rowSpacing: CGFloat = 8
+
+        let naturalRowsHeight = CGFloat(visibleCount) * rowHeight + CGFloat(max(visibleCount - 1, 0)) * rowSpacing
+        let contentHeight = visibleCount == 0 ? 180 : min(naturalRowsHeight + 8, 420)
+        let totalHeight = headerHeight + footerHeight + dividerHeight + dividerHeight + contentPadding + contentHeight
+
+        return NSSize(width: 400, height: totalHeight)
+    }
+
     private func refreshPopoverContent() {
+        popover.contentSize = popoverSize
         popover.contentViewController = NSHostingController(
             rootView: MenuBarContentView(
                 showManagementWindow: { self.showManagementWindow() }
@@ -85,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Watch Repositories"
-        window.setContentSize(NSSize(width: 620, height: 560))
+        window.setContentSize(NSSize(width: 620, height: 600))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.isReleasedWhenClosed = false
         window.center()
@@ -127,8 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         closePopover(nil)
 
         let menu = NSMenu()
+        menu.addItem(withTitle: aboutMenuTitle, action: #selector(showManagementWindowFromMenu), keyEquivalent: "")
+
+        if let update = repositoryStore.availableAppUpdate, update.isNewerThanInstalled {
+            menu.addItem(withTitle: "Download Release Watcher \(update.latestVersion)", action: #selector(openLatestAppReleaseFromMenu), keyEquivalent: "")
+        }
+
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Open Release Watcher", action: #selector(togglePopover(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "Manage Repositories", action: #selector(openManagementWindowFromMenu), keyEquivalent: "")
+        menu.addItem(withTitle: "Manage Repositories", action: #selector(showManagementWindowFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh Now", action: #selector(refreshFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(quitFromMenu), keyEquivalent: "q")
@@ -142,15 +167,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusItem.menu = nil
     }
 
+    private var aboutMenuTitle: String {
+        "About Release Watcher \(AppMetadata.versionString)"
+    }
+
     @objc
-    private func openManagementWindowFromMenu() {
+    private func showManagementWindowFromMenu() {
         showManagementWindow()
+    }
+
+    @objc
+    private func openLatestAppReleaseFromMenu() {
+        guard let url = repositoryStore.availableAppUpdate?.releaseURL else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     @objc
     private func refreshFromMenu() {
         Task { @MainActor in
             await repositoryStore.refreshRepositories(appState: appState)
+            self.refreshPopoverContent()
         }
     }
 

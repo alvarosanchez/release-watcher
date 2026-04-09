@@ -5,6 +5,8 @@ APP_NAME="ReleaseWatcher"
 CONFIGURATION="release"
 BINARY_PATH=".build/arm64-apple-macosx/${CONFIGURATION}/${APP_NAME}"
 APP_DIR="dist/${APP_NAME}.app"
+RAW_VERSION="${GITHUB_REF_NAME:-0.1.0}"
+APP_VERSION="${RAW_VERSION#v}"
 CONTENTS_DIR="${APP_DIR}/Contents"
 MACOS_DIR="${CONTENTS_DIR}/MacOS"
 RESOURCE_DIR="${CONTENTS_DIR}/Resources"
@@ -38,7 +40,7 @@ cat > "${CONTENTS_DIR}/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>${GITHUB_REF_NAME:-0.1.0}</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleVersion</key>
     <string>${GITHUB_RUN_NUMBER:-1}</string>
     <key>LSMinimumSystemVersion</key>

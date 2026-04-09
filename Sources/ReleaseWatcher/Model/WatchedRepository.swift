@@ -6,6 +6,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
     var name: String
     var addedAt: Date
     var isWatchingPrereleases: Bool
+    var isSystemDefined: Bool
     var latestKnownTag: String?
     var latestReleaseName: String?
     var latestReleaseURL: URL?
@@ -18,6 +19,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         name: String,
         addedAt: Date = .now,
         isWatchingPrereleases: Bool = false,
+        isSystemDefined: Bool = false,
         latestKnownTag: String? = nil,
         latestReleaseName: String? = nil,
         latestReleaseURL: URL? = nil,
@@ -29,6 +31,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         self.name = name
         self.addedAt = addedAt
         self.isWatchingPrereleases = isWatchingPrereleases
+        self.isSystemDefined = isSystemDefined
         self.latestKnownTag = latestKnownTag
         self.latestReleaseName = latestReleaseName
         self.latestReleaseURL = latestReleaseURL

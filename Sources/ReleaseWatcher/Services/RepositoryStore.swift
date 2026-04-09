@@ -8,6 +8,7 @@ final class RepositoryStore {
     private(set) var lastPersistenceError: String?
     private(set) var didLoadPersistedRepositories = false
     private(set) var lastNotificationError: String?
+    private(set) var availableAppUpdate: AppUpdateInfo?
 
     private let releaseService = GitHubReleaseService()
     private let persistence: RepositoryPersistence
@@ -20,6 +21,7 @@ final class RepositoryStore {
         self.persistence = persistence
         self.notificationsEnabled = notificationsEnabled
         load()
+        ensureSystemRepositories()
     }
 
     var storageLocationDescription: String {
@@ -27,11 +29,15 @@ final class RepositoryStore {
     }
 
     var hasRepositories: Bool {
-        !repositories.isEmpty
+        !visibleRepositories.isEmpty
+    }
+
+    var visibleRepositories: [WatchedRepository] {
+        repositories.filter { !$0.isSystemDefined }
     }
 
     var sortedRepositories: [WatchedRepository] {
-        repositories.sorted(by: repositorySortComparator)
+        visibleRepositories.sorted(by: repositorySortComparator)
     }
 
     func addRepository(from input: String) throws {
@@ -47,7 +53,7 @@ final class RepositoryStore {
     }
 
     func removeRepositories(withIDs ids: Set<UUID>) throws {
-        repositories.removeAll { ids.contains($0.id) }
+        repositories.removeAll { ids.contains($0.id) && !$0.isSystemDefined }
         try save()
     }
 
@@ -67,14 +73,27 @@ final class RepositoryStore {
             appState.lastRefreshAt = .now
         }
 
-        do {
-            for index in repositories.indices {
+        var visibleRepositoryErrors: [String] = []
+        availableAppUpdate = nil
+
+        for index in repositories.indices {
+            do {
                 let release = try await releaseService.latestRelease(for: repositories[index])
                 let previousTag = repositories[index].latestKnownTag
                 repositories[index].latestKnownTag = release.tagName
                 repositories[index].latestReleaseName = release.name
                 repositories[index].latestReleaseURL = release.htmlURL
                 repositories[index].latestReleasePublishedAt = release.publishedAt
+
+                if repositories[index].isSystemDefined {
+                    availableAppUpdate = AppUpdateInfo(
+                        latestVersion: release.tagName,
+                        releaseName: release.name,
+                        releaseURL: release.htmlURL,
+                        publishedAt: release.publishedAt,
+                        isNewerThanInstalled: AppMetadata.isVersionNewer(release.tagName)
+                    )
+                }
 
                 if let snapshotIndex = repositories[index].snapshots.firstIndex(where: { $0.tagName == release.tagName }) {
                     repositories[index].snapshots[snapshotIndex].releaseName = release.name
@@ -93,13 +112,23 @@ final class RepositoryStore {
                 if let previousTag, previousTag != release.tagName {
                     try await sendNotification(for: repositories[index], release: release)
                 }
+            } catch {
+                if repositories[index].isSystemDefined {
+                    availableAppUpdate = nil
+                } else {
+                    visibleRepositoryErrors.append("\(repositories[index].displayName): \(error.localizedDescription)")
+                }
             }
+        }
 
+        do {
             try save()
-            appState.lastErrorMessage = nil
         } catch {
             appState.lastErrorMessage = error.localizedDescription
+            return
         }
+
+        appState.lastErrorMessage = visibleRepositoryErrors.isEmpty ? nil : visibleRepositoryErrors.joined(separator: "\n")
     }
 
     func requestNotificationPermission() async {
@@ -142,8 +171,8 @@ final class RepositoryStore {
         }
 
         let content = UNMutableNotificationContent()
-        content.title = repository.displayName
-        content.body = "New release: \(release.tagName)"
+        content.title = repository.isSystemDefined ? "Release Watcher" : repository.displayName
+        content.body = repository.isSystemDefined ? "A new version is available: \(release.tagName)" : "New release: \(release.tagName)"
         content.sound = .default
 
         let request = UNNotificationRequest(
@@ -158,6 +187,17 @@ final class RepositoryStore {
             lastNotificationError = error.localizedDescription
             throw error
         }
+    }
+
+    private func ensureSystemRepositories() {
+        let appRepository = AppRepository.releaseWatcherRepository
+
+        guard !repositories.contains(where: { $0.owner == appRepository.owner && $0.name == appRepository.name }) else {
+            return
+        }
+
+        repositories.append(appRepository)
+        try? save()
     }
 
     private var repositorySortComparator: (WatchedRepository, WatchedRepository) -> Bool {
@@ -176,6 +216,36 @@ final class RepositoryStore {
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
         }
+    }
+}
+
+struct AppUpdateInfo {
+    let latestVersion: String
+    let releaseName: String?
+    let releaseURL: URL
+    let publishedAt: Date?
+    let isNewerThanInstalled: Bool
+}
+
+enum AppRepository {
+    static let releaseWatcherRepository = WatchedRepository(
+        owner: "alvarosanchez",
+        name: "release-watcher",
+        isSystemDefined: true
+    )
+}
+
+struct AppMetadata {
+    static var versionString: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Unknown"
+    }
+
+    static func isVersionNewer(_ latestTag: String) -> Bool {
+        normalize(latestTag) != normalize(versionString)
+    }
+
+    private static func normalize(_ raw: String) -> String {
+        raw.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
     }
 }
 
