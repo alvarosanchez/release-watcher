@@ -11,6 +11,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
     var latestReleaseName: String?
     var latestReleaseURL: URL?
     var latestReleasePublishedAt: Date?
+    var unreadBaselineAt: Date?
     var snapshots: [ReleaseSnapshot]
 
     init(
@@ -24,6 +25,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         latestReleaseName: String? = nil,
         latestReleaseURL: URL? = nil,
         latestReleasePublishedAt: Date? = nil,
+        unreadBaselineAt: Date? = nil,
         snapshots: [ReleaseSnapshot] = []
     ) {
         self.id = id
@@ -36,6 +38,7 @@ struct WatchedRepository: Identifiable, Codable, Hashable {
         self.latestReleaseName = latestReleaseName
         self.latestReleaseURL = latestReleaseURL
         self.latestReleasePublishedAt = latestReleasePublishedAt
+        self.unreadBaselineAt = unreadBaselineAt
         self.snapshots = snapshots
     }
 

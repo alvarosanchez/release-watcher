@@ -29,16 +29,11 @@ final class RepositoryStore {
         self.notificationsEnabled = notificationsEnabled
         self.defaults = defaults
 
-        if let persistedLastOpenedAt = defaults.object(forKey: Self.lastMenuBarOpenedAtKey) as? Date {
-            lastMenuBarOpenedAt = persistedLastOpenedAt
-        } else {
-            let initialOpenedAt = Date.now
-            lastMenuBarOpenedAt = initialOpenedAt
-            defaults.set(initialOpenedAt, forKey: Self.lastMenuBarOpenedAtKey)
-        }
+        lastMenuBarOpenedAt = defaults.object(forKey: Self.lastMenuBarOpenedAtKey) as? Date
 
         load()
         ensureSystemRepositories()
+        seedUnreadBaselinesFromKnownReleases()
     }
 
     var storageLocationDescription: String {
@@ -87,7 +82,7 @@ final class RepositoryStore {
     }
 
     func unreadReleaseCount(for repository: WatchedRepository) -> Int {
-        let baseline = max(lastMenuBarOpenedAt ?? repository.addedAt, repository.addedAt)
+        let baseline = effectiveUnreadBaseline(for: repository)
 
         return repository.snapshots.reduce(into: 0) { total, snapshot in
             guard snapshotDate(for: snapshot) > baseline else {
@@ -119,6 +114,10 @@ final class RepositoryStore {
 
         for index in repositories.indices {
             do {
+                if lastMenuBarOpenedAt == nil, repositories[index].unreadBaselineAt == nil {
+                    repositories[index].unreadBaselineAt = knownReleaseDate(for: repositories[index])
+                }
+
                 let releases = try await releaseService.releases(for: repositories[index])
                 guard let release = releases.first else {
                     throw GitHubReleaseServiceError.noPublishedReleases
@@ -199,6 +198,16 @@ final class RepositoryStore {
         }
     }
 
+    private func seedUnreadBaselinesFromKnownReleases() {
+        guard lastMenuBarOpenedAt == nil else {
+            return
+        }
+
+        for index in repositories.indices where repositories[index].unreadBaselineAt == nil {
+            repositories[index].unreadBaselineAt = knownReleaseDate(for: repositories[index])
+        }
+    }
+
     private func mergeSnapshots(from releases: [GitHubReleaseService.Release], into repository: inout WatchedRepository) {
         var snapshotsByTag: [String: ReleaseSnapshot] = [:]
 
@@ -264,6 +273,23 @@ final class RepositoryStore {
 
     private func snapshotDate(for snapshot: ReleaseSnapshot) -> Date {
         snapshot.publishedAt ?? snapshot.createdAt
+    }
+
+    private func effectiveUnreadBaseline(for repository: WatchedRepository) -> Date {
+        let baseline = lastMenuBarOpenedAt
+            ?? repository.unreadBaselineAt
+            ?? repository.addedAt
+
+        return max(baseline, repository.addedAt)
+    }
+
+    private func knownReleaseDate(for repository: WatchedRepository) -> Date? {
+        var dates = repository.snapshots.map(snapshotDate)
+        if let latestReleasePublishedAt = repository.latestReleasePublishedAt {
+            dates.append(latestReleasePublishedAt)
+        }
+
+        return dates.max()
     }
 
     private func notifyStateChange() {

@@ -83,12 +83,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         let badgeText = unreadCount > 99 ? "99+" : String(unreadCount)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+        paragraphStyle.lineBreakMode = .byClipping
         let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: NSColor.white,
+            .paragraphStyle: paragraphStyle,
         ]
-        let textSize = badgeText.size(withAttributes: attributes)
+        let textSize = (badgeText as NSString).boundingRect(
+            with: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes
+        ).integral.size
         let badgeHeight: CGFloat = 14
         let badgeHorizontalPadding: CGFloat = 4
         let badgeWidth = max(badgeHeight, ceil(textSize.width) + badgeHorizontalPadding * 2)
@@ -122,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             width: badgeRect.width,
             height: textSize.height
         )
-        badgeText.draw(in: textRect, withAttributes: attributes)
+        (badgeText as NSString).draw(in: textRect, withAttributes: attributes)
 
         badgedImage.unlockFocus()
         return badgedImage

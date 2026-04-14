@@ -5,6 +5,7 @@ struct GitHubReleaseService {
         let tagName: String
         let name: String?
         let htmlURL: URL
+        let draft: Bool
         let prerelease: Bool
         let publishedAt: Date?
 
@@ -12,6 +13,7 @@ struct GitHubReleaseService {
             case tagName = "tag_name"
             case name
             case htmlURL = "html_url"
+            case draft
             case prerelease
             case publishedAt = "published_at"
         }
@@ -25,18 +27,40 @@ struct GitHubReleaseService {
     }
 
     func releases(for repository: WatchedRepository) async throws -> [Release] {
-        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases?per_page=100")!
-        let data = try await performRequest(to: endpoint)
+        let perPage = 100
+        var page = 1
+        var releases: [Release] = []
 
-        let releases = try decoder.decode([Release].self, from: data)
-            .filter { repository.isWatchingPrereleases || !$0.prerelease }
+        while true {
+            let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases?per_page=\(perPage)&page=\(page)")!
+            let data = try await performRequest(to: endpoint)
+            let pageReleases = try decoder.decode([Release].self, from: data)
+
+            releases.append(
+                contentsOf: pageReleases.filter { release in
+                    guard !release.draft else {
+                        return false
+                    }
+
+                    return repository.isWatchingPrereleases || !release.prerelease
+                }
+            )
+
+            if pageReleases.count < perPage {
+                break
+            }
+
+            page += 1
+        }
+
+        let sortedReleases = releases
             .sorted(by: { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) })
 
-        guard !releases.isEmpty else {
+        guard !sortedReleases.isEmpty else {
             throw GitHubReleaseServiceError.noPublishedReleases
         }
 
-        return releases
+        return sortedReleases
     }
 
     private func performRequest(to endpoint: URL) async throws -> Data {
