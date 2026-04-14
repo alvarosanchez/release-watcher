@@ -24,38 +24,19 @@ struct GitHubReleaseService {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    func latestRelease(for repository: WatchedRepository) async throws -> Release {
-        do {
-            return try await fetchLatestRelease(for: repository)
-        } catch let error as GitHubReleaseServiceError {
-            if case .invalidResponse(404) = error {
-                return try await fetchLatestPublishedReleaseFromList(for: repository)
-            }
-            throw error
-        } catch {
-            throw error
-        }
-    }
-
-    private func fetchLatestRelease(for repository: WatchedRepository) async throws -> Release {
-        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases/latest")!
+    func releases(for repository: WatchedRepository) async throws -> [Release] {
+        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases?per_page=100")!
         let data = try await performRequest(to: endpoint)
-        return try decoder.decode(Release.self, from: data)
-    }
 
-    private func fetchLatestPublishedReleaseFromList(for repository: WatchedRepository) async throws -> Release {
-        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases")!
-        let data = try await performRequest(to: endpoint)
         let releases = try decoder.decode([Release].self, from: data)
-
-        guard let latest = releases
-            .filter({ !$0.prerelease })
+            .filter { repository.isWatchingPrereleases || !$0.prerelease }
             .sorted(by: { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) })
-            .first else {
+
+        guard !releases.isEmpty else {
             throw GitHubReleaseServiceError.noPublishedReleases
         }
 
-        return latest
+        return releases
     }
 
     private func performRequest(to endpoint: URL) async throws -> Data {

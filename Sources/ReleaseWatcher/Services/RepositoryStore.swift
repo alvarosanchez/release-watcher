@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UserNotifications
 
 @Observable
@@ -9,17 +10,33 @@ final class RepositoryStore {
     private(set) var didLoadPersistedRepositories = false
     private(set) var lastNotificationError: String?
     private(set) var availableAppUpdate: AppUpdateInfo?
+    private(set) var lastMenuBarOpenedAt: Date?
 
     private let releaseService = GitHubReleaseService()
     private let persistence: RepositoryPersistence
     private let notificationsEnabled: Bool
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored var onStateChange: (@MainActor () -> Void)?
+
+    private static let lastMenuBarOpenedAtKey = "menuBarLastOpenedAt"
 
     init(
         persistence: RepositoryPersistence = RepositoryPersistence(),
-        notificationsEnabled: Bool = AppRuntimeCapabilities.supportsUserNotifications
+        notificationsEnabled: Bool = AppRuntimeCapabilities.supportsUserNotifications,
+        defaults: UserDefaults = .standard
     ) {
         self.persistence = persistence
         self.notificationsEnabled = notificationsEnabled
+        self.defaults = defaults
+
+        if let persistedLastOpenedAt = defaults.object(forKey: Self.lastMenuBarOpenedAtKey) as? Date {
+            lastMenuBarOpenedAt = persistedLastOpenedAt
+        } else {
+            let initialOpenedAt = Date.now
+            lastMenuBarOpenedAt = initialOpenedAt
+            defaults.set(initialOpenedAt, forKey: Self.lastMenuBarOpenedAtKey)
+        }
+
         load()
         ensureSystemRepositories()
     }
@@ -40,6 +57,10 @@ final class RepositoryStore {
         visibleRepositories.sorted(by: repositorySortComparator)
     }
 
+    var unreadReleaseCount: Int {
+        visibleRepositories.reduce(0) { $0 + unreadReleaseCount(for: $1) }
+    }
+
     func addRepository(from input: String) throws {
         let parsed = try RepositoryInputParser.parse(input)
         let repository = WatchedRepository(owner: parsed.owner, name: parsed.name)
@@ -50,11 +71,31 @@ final class RepositoryStore {
 
         repositories.append(repository)
         try save()
+        notifyStateChange()
     }
 
     func removeRepositories(withIDs ids: Set<UUID>) throws {
         repositories.removeAll { ids.contains($0.id) && !$0.isSystemDefined }
         try save()
+        notifyStateChange()
+    }
+
+    func recordMenuBarInteraction(at date: Date = .now) {
+        lastMenuBarOpenedAt = date
+        defaults.set(date, forKey: Self.lastMenuBarOpenedAtKey)
+        notifyStateChange()
+    }
+
+    func unreadReleaseCount(for repository: WatchedRepository) -> Int {
+        let baseline = max(lastMenuBarOpenedAt ?? repository.addedAt, repository.addedAt)
+
+        return repository.snapshots.reduce(into: 0) { total, snapshot in
+            guard snapshotDate(for: snapshot) > baseline else {
+                return
+            }
+
+            total += 1
+        }
     }
 
     func refreshRepositories(appState: AppState) async {
@@ -78,7 +119,11 @@ final class RepositoryStore {
 
         for index in repositories.indices {
             do {
-                let release = try await releaseService.latestRelease(for: repositories[index])
+                let releases = try await releaseService.releases(for: repositories[index])
+                guard let release = releases.first else {
+                    throw GitHubReleaseServiceError.noPublishedReleases
+                }
+
                 let previousTag = repositories[index].latestKnownTag
                 repositories[index].latestKnownTag = release.tagName
                 repositories[index].latestReleaseName = release.name
@@ -95,19 +140,7 @@ final class RepositoryStore {
                     )
                 }
 
-                if let snapshotIndex = repositories[index].snapshots.firstIndex(where: { $0.tagName == release.tagName }) {
-                    repositories[index].snapshots[snapshotIndex].releaseName = release.name
-                    repositories[index].snapshots[snapshotIndex].htmlURL = release.htmlURL
-                    repositories[index].snapshots[snapshotIndex].publishedAt = release.publishedAt
-                } else {
-                    let snapshot = ReleaseSnapshot(
-                        tagName: release.tagName,
-                        releaseName: release.name,
-                        publishedAt: release.publishedAt,
-                        htmlURL: release.htmlURL
-                    )
-                    repositories[index].snapshots.insert(snapshot, at: 0)
-                }
+                mergeSnapshots(from: releases, into: &repositories[index])
 
                 if let previousTag, previousTag != release.tagName {
                     try await sendNotification(for: repositories[index], release: release)
@@ -129,6 +162,7 @@ final class RepositoryStore {
         }
 
         appState.lastErrorMessage = visibleRepositoryErrors.isEmpty ? nil : visibleRepositoryErrors.joined(separator: "\n")
+        notifyStateChange()
     }
 
     func requestNotificationPermission() async {
@@ -165,6 +199,34 @@ final class RepositoryStore {
         }
     }
 
+    private func mergeSnapshots(from releases: [GitHubReleaseService.Release], into repository: inout WatchedRepository) {
+        var snapshotsByTag: [String: ReleaseSnapshot] = [:]
+
+        for snapshot in repository.snapshots {
+            snapshotsByTag[snapshot.tagName] = snapshot
+        }
+
+        for release in releases {
+            if var existingSnapshot = snapshotsByTag[release.tagName] {
+                existingSnapshot.releaseName = release.name
+                existingSnapshot.htmlURL = release.htmlURL
+                existingSnapshot.publishedAt = release.publishedAt
+                snapshotsByTag[release.tagName] = existingSnapshot
+            } else {
+                snapshotsByTag[release.tagName] = ReleaseSnapshot(
+                    tagName: release.tagName,
+                    releaseName: release.name,
+                    publishedAt: release.publishedAt,
+                    htmlURL: release.htmlURL
+                )
+            }
+        }
+
+        repository.snapshots = snapshotsByTag.values.sorted {
+            snapshotDate(for: $0) > snapshotDate(for: $1)
+        }
+    }
+
     private func sendNotification(for repository: WatchedRepository, release: GitHubReleaseService.Release) async throws {
         guard notificationsEnabled else {
             return
@@ -198,6 +260,14 @@ final class RepositoryStore {
 
         repositories.append(appRepository)
         try? save()
+    }
+
+    private func snapshotDate(for snapshot: ReleaseSnapshot) -> Date {
+        snapshot.publishedAt ?? snapshot.createdAt
+    }
+
+    private func notifyStateChange() {
+        onStateChange?()
     }
 
     private var repositorySortComparator: (WatchedRepository, WatchedRepository) -> Bool {

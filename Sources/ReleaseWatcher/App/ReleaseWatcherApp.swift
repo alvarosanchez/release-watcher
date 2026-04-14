@@ -10,10 +10,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private var eventMonitor: Any?
+    private var lastAppliedRefreshIntervalMinutes = 30
 
     @AppStorage("refreshIntervalMinutes") private var refreshIntervalMinutes = 30
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        repositoryStore.onStateChange = { [weak self] in
+            self?.refreshStatusItemAppearance()
+        }
+
+        lastAppliedRefreshIntervalMinutes = refreshIntervalMinutes
         installStatusItem()
         configurePopover()
 
@@ -28,8 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard self.refreshIntervalMinutes != self.lastAppliedRefreshIntervalMinutes else {
+                    return
+                }
+
+                self.lastAppliedRefreshIntervalMinutes = self.refreshIntervalMinutes
                 self.appState.restartPolling(repositoryStore: self.repositoryStore, intervalMinutes: self.refreshIntervalMinutes)
                 self.refreshPopoverContent()
             }
@@ -44,14 +55,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func installStatusItem() {
         if let button = statusItem.button {
-            button.image = statusItemImage()
+            button.imagePosition = .imageOnly
             button.action = #selector(handleStatusItemClick(_:))
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+
+        refreshStatusItemAppearance()
     }
 
-    private func statusItemImage() -> NSImage? {
+    private func refreshStatusItemAppearance() {
+        guard let button = statusItem.button else {
+            return
+        }
+
+        button.title = ""
+        button.image = statusItemImage(unreadCount: repositoryStore.unreadReleaseCount)
+    }
+
+    private func statusItemImage(unreadCount: Int) -> NSImage? {
+        guard let image = baseStatusItemImage() else {
+            return nil
+        }
+
+        guard unreadCount > 0 else {
+            return image
+        }
+
+        let badgeText = unreadCount > 99 ? "99+" : String(unreadCount)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white,
+        ]
+        let textSize = badgeText.size(withAttributes: attributes)
+        let badgeHeight: CGFloat = 14
+        let badgeHorizontalPadding: CGFloat = 4
+        let badgeWidth = max(badgeHeight, ceil(textSize.width) + badgeHorizontalPadding * 2)
+        let spacing: CGFloat = 4
+        let canvasSize = NSSize(width: image.size.width + spacing + badgeWidth, height: max(image.size.height, badgeHeight))
+
+        let badgedImage = NSImage(size: canvasSize)
+        badgedImage.lockFocus()
+
+        let imageRect = NSRect(
+            x: 0,
+            y: (canvasSize.height - image.size.height) / 2,
+            width: image.size.width,
+            height: image.size.height
+        )
+        image.draw(in: imageRect)
+
+        let badgeRect = NSRect(
+            x: canvasSize.width - badgeWidth,
+            y: (canvasSize.height - badgeHeight) / 2,
+            width: badgeWidth,
+            height: badgeHeight
+        )
+
+        NSColor.systemRed.setFill()
+        NSBezierPath(roundedRect: badgeRect, xRadius: badgeHeight / 2, yRadius: badgeHeight / 2).fill()
+
+        let textRect = NSRect(
+            x: badgeRect.minX,
+            y: badgeRect.minY + (badgeRect.height - textSize.height) / 2 - 0.5,
+            width: badgeRect.width,
+            height: textSize.height
+        )
+        badgeText.draw(in: textRect, withAttributes: attributes)
+
+        badgedImage.unlockFocus()
+        return badgedImage
+    }
+
+    private func baseStatusItemImage() -> NSImage? {
         if let imageURL = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
            let image = NSImage(contentsOf: imageURL) {
             image.isTemplate = false
@@ -148,6 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc
     private func handleStatusItemClick(_ sender: Any?) {
+        repositoryStore.recordMenuBarInteraction()
+
         guard let event = NSApp.currentEvent else {
             togglePopover(sender)
             return
