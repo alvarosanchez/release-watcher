@@ -5,6 +5,7 @@ struct GitHubReleaseService {
         let tagName: String
         let name: String?
         let htmlURL: URL
+        let draft: Bool
         let prerelease: Bool
         let publishedAt: Date?
 
@@ -12,6 +13,7 @@ struct GitHubReleaseService {
             case tagName = "tag_name"
             case name
             case htmlURL = "html_url"
+            case draft
             case prerelease
             case publishedAt = "published_at"
         }
@@ -24,38 +26,41 @@ struct GitHubReleaseService {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    func latestRelease(for repository: WatchedRepository) async throws -> Release {
-        do {
-            return try await fetchLatestRelease(for: repository)
-        } catch let error as GitHubReleaseServiceError {
-            if case .invalidResponse(404) = error {
-                return try await fetchLatestPublishedReleaseFromList(for: repository)
+    func releases(for repository: WatchedRepository) async throws -> [Release] {
+        let perPage = 100
+        var page = 1
+        var releases: [Release] = []
+
+        while true {
+            let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases?per_page=\(perPage)&page=\(page)")!
+            let data = try await performRequest(to: endpoint)
+            let pageReleases = try decoder.decode([Release].self, from: data)
+
+            releases.append(
+                contentsOf: pageReleases.filter { release in
+                    guard !release.draft else {
+                        return false
+                    }
+
+                    return repository.isWatchingPrereleases || !release.prerelease
+                }
+            )
+
+            if pageReleases.count < perPage {
+                break
             }
-            throw error
-        } catch {
-            throw error
+
+            page += 1
         }
-    }
 
-    private func fetchLatestRelease(for repository: WatchedRepository) async throws -> Release {
-        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases/latest")!
-        let data = try await performRequest(to: endpoint)
-        return try decoder.decode(Release.self, from: data)
-    }
-
-    private func fetchLatestPublishedReleaseFromList(for repository: WatchedRepository) async throws -> Release {
-        let endpoint = URL(string: "https://api.github.com/repos/\(repository.owner)/\(repository.name)/releases")!
-        let data = try await performRequest(to: endpoint)
-        let releases = try decoder.decode([Release].self, from: data)
-
-        guard let latest = releases
-            .filter({ !$0.prerelease })
+        let sortedReleases = releases
             .sorted(by: { ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast) })
-            .first else {
+
+        guard !sortedReleases.isEmpty else {
             throw GitHubReleaseServiceError.noPublishedReleases
         }
 
-        return latest
+        return sortedReleases
     }
 
     private func performRequest(to endpoint: URL) async throws -> Data {
